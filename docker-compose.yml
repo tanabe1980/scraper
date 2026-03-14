@@ -1,0 +1,40 @@
+services:
+  dl-app-postgres:
+    container_name: dl_app_postgres
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=dl_app
+      - POSTGRES_USER=dl_app
+      - POSTGRES_PASSWORD=dl_app_local_dev
+    volumes:
+      - ./dl_app/docker/data/postgres:/var/lib/postgresql/data
+      - ./dl_app/docker/src/bootstrap:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "15432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dl_app -d dl_app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  dl-app-worker:
+    container_name: dl_app_worker
+    build:
+      context: .
+      dockerfile: dl_app/docker/Dockerfile
+    working_dir: /workspace/dl_app
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+      - DATABASE_URL=postgresql://dl_app:dl_app_local_dev@dl-app-postgres:5432/dl_app
+    volumes:
+      - ./dl_app:/workspace/dl_app
+      - ./dl_app/docker/src:/workspace/dl_app/docker/src
+      - ./dl_app/docker/data:/workspace/dl_app/docker/data
+      - ./dl_app/test:/workspace/dl_app/test
+    depends_on:
+      dl-app-postgres:
+        condition: service_healthy
+    ports:
+      - "18081:8000"
+    command: ["bash", "-lc", "sleep infinity"]

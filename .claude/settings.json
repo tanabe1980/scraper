@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run *)",
+      "Bash(next *)",
+      "Bash(npx tsc*)",
+      "Bash(npx eslint*)",
+      "Bash(pytest*)",
+      "Bash(python -m pytest*)",
+      "Bash(ruff*)",
+      "Bash(black*)"
+    ]
+  },
+  "instructions": [
+    "思考は英語で行い、最終的な出力は必ず日本語で提供する。",
+    "コードを新規作成または修正した場合、必ずテストを追加または修正し、必要に応じて設計ドキュメントも更新する。",
+    "変更後は必ずローカルでテストを実行し、失敗した場合は原因を特定して修正する。"
+  ]
+}
