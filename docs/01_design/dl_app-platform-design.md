@@ -99,6 +99,28 @@ sites:
 - `failed` -> `queued` (再試行時)
 - `failed` -> `skipped` (max_runs到達時)
 
+## 配布・更新フロー(NASリリース運用)
+- 対象は自分専用のWindows端末を前提とし、SaaS配布基盤は利用しない。
+- リリース媒体はNAS上の `releases` フォルダを利用する。
+- 配布ポリシー:
+  - `main` マージ済みのコミットのみを配布対象にする。
+  - リリース作成時に `latest.json` を更新して最新バージョンを指し替える。
+- 構成要素:
+  - `scripts/windows/publish_release_to_nas.ps1`:
+    - `main` / clean working tree / `origin/main` 同期を確認
+    - リリースZIP(`dl_app-<version>.zip`)を作成
+    - `releases/<version>/` 配下へZIPとハッシュを配置
+    - `releases/latest.json` を更新
+  - `update_dl_app.ps1`:
+    - インストール端末で `latest.json` を参照
+    - バージョン差分がある場合のみ更新
+    - 更新時は `docker compose down` -> ファイル反映 -> `install_dl_app.bat` 再実行
+- 更新判定:
+  - ローカルの `.installed-version` と `latest.json.version` を比較する。
+  - 同一バージョンなら更新をスキップする。
+- 設定:
+  - NASのリリースルートは `dl_app_release_config.json` の `nas_releases_root` で定義する。
+
 ## 影響範囲
 - 新規作成:
   - `dl_app/extension/` (Reading List連携)
@@ -106,6 +128,10 @@ sites:
   - `dl_app/storage/` (PostgreSQLスキーマ)
   - `dl_app/docker/` (Dockerローカル実行オーバーライド)
   - `docker-compose.yml` (リポジトリ直下)
+  - `install_dl_app.bat` (初期インストール)
+  - `update_dl_app.bat` / `update_dl_app.ps1` (端末更新)
+  - `scripts/windows/publish_release_to_nas.bat` / `scripts/windows/publish_release_to_nas.ps1` (NAS反映)
+  - `dl_app_release_config.json.example` (更新設定サンプル)
   - `tests/e2e/` (連携E2E)
   - `tests/unit/` (ルール判定・状態遷移)
 - 既存影響:
