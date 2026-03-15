@@ -56,6 +56,24 @@
 - `status` は列挙値制約
 - `url + acquired_at` にインデックスを張る
 
+### 手動確認イベントテーブル: `manual_verification_events`
+
+| カラム | 型 | 必須 | 説明 |
+|---|---|---|---|
+| `id` | UUID | Yes | 手動確認イベントID |
+| `history_id` | UUID | No | `scrape_history.id` への参照 |
+| `site_name` | TEXT | Yes | 対象サイト名 |
+| `url` | TEXT | Yes | 対象URL |
+| `check_provider` | TEXT | Yes | `recaptcha/hcaptcha/cloudflare_turnstile/unknown` |
+| `detection_reason` | TEXT | Yes | 検知理由(`selector_detected` 等) |
+| `background` | TEXT | Yes | なぜ当該サイトでチェックが出るかの背景 |
+| `matched_signals` | JSONB | Yes | 検知根拠(セレクタ,HTTPステータス,文言等) |
+| `screenshot_path` | TEXT | No | 画面証跡 |
+| `html_snapshot_path` | TEXT | No | HTML証跡 |
+| `status_before` | TEXT | Yes | 変更前ステータス |
+| `status_after` | TEXT | Yes | 変更後ステータス(`needs_manual_verification`) |
+| `created_at` | TIMESTAMPTZ | Yes | 発生日時 |
+
 ## サイトルール設計
 
 `sites.config.yaml` でサイト固有処理を定義する。
@@ -83,19 +101,33 @@ sites:
 - `max_runs`
 - ダウンロード操作定義
 
+## ロボットチェック判定プロファイル
+
+- `dl_app/worker/site_rules/robot_check_profiles.json` でサイト別の判定背景を管理する。
+- プロファイルに持つ情報:
+  - `site_name`
+  - `host_patterns`
+  - `background`
+  - `known_signals`
+- 検知時はURLのホストと `host_patterns` を照合し、`site_name` と `background` を解決する。
+
 ## 実行フロー
 1. `chrome-list-agent` がReading Listから対象URLを取得する。
 2. `scraper-worker` へ対象URLを投入し、履歴を `queued` で作成する。
 3. Workerはサイトルールに一致するURLのみ実行対象とする。
 4. 実行開始時に履歴を `running` に更新し、`started_at` を記録する。
-5. Playwrightでダウンロード処理を行う。
-6. 成功時は、履歴を `succeeded` に更新し、拡張へ削除対象URLを通知してReading Listから削除する。
-7. 失敗時は、履歴を `failed` に更新し、回数上限未満なら次回スケジュールで再試行する。
-8. 失敗が `max_runs` に達した対象は `skipped` として停止管理する。
+5. Playwrightでロボットチェックを検知した場合は、`site_name / check_provider / background / matched_signals` を `manual_verification_events` に記録する。
+6. ロボットチェック検知時は履歴を `needs_manual_verification` に更新し、手動介入待ちにする。
+7. 手動介入後に再実行可能と判断した対象は `queued` に戻して再実行する。
+8. 成功時は、履歴を `succeeded` に更新し、拡張へ削除対象URLを通知してReading Listから削除する。
+9. 失敗時は、履歴を `failed` に更新し、回数上限未満なら次回スケジュールで再試行する。
+10. 失敗が `max_runs` に達した対象は `skipped` として停止管理する。
 
 ## ステータス遷移
 - `queued` -> `running` -> `succeeded`
 - `queued` -> `running` -> `failed`
+- `queued` -> `running` -> `needs_manual_verification`
+- `needs_manual_verification` -> `queued` (手動介入後の再開)
 - `failed` -> `queued` (再試行時)
 - `failed` -> `skipped` (max_runs到達時)
 
@@ -132,6 +164,9 @@ sites:
   - `update_dl_app.bat` / `update_dl_app.ps1` (端末更新)
   - `scripts/windows/publish_release_to_nas.bat` / `scripts/windows/publish_release_to_nas.ps1` (NAS反映)
   - `dl_app_release_config.json.example` (更新設定サンプル)
+  - `dl_app/worker/manual_verification.py` (手動確認イベントモデル)
+  - `dl_app/worker/site_rules/robot_check_profiles.json` (サイト別背景定義)
+  - `dl_app/docker/src/bootstrap/001_init.sql` (manual_verification_events追加)
   - `tests/e2e/` (連携E2E)
   - `tests/unit/` (ルール判定・状態遷移)
 - 既存影響:
@@ -155,6 +190,8 @@ sites:
 - 異常系:
   - ルール不一致URLの`skipped`
   - 要素未検出/タイムアウトによる`failed`
+  - ロボットチェック検知時の `needs_manual_verification` 遷移
+  - `manual_verification_events` に `site_name/background/matched_signals` が保存されること
   - `max_runs` 到達時の再試行停止
   - 拡張側削除失敗時の再同期
 - データ整合:
@@ -165,4 +202,5 @@ sites:
 - Chrome Reading ListからURLを取得しScraper投入できる。
 - 成功時のみReading Listから削除される。
 - 履歴に `ID, サイト名, URL, 取得日, ステータス, 開始日` が必ず保存される。
+- ロボットチェック検知時に、対象サイト名と背景情報を確認できる記録が保存される。
 - サイトごとの間隔/上限回数が設定通り機能する。

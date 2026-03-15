@@ -1,0 +1,30 @@
+{
+  "profiles": [
+    {
+      "site_name": "sample_recaptcha_site",
+      "host_patterns": [
+        "example.com",
+        "*.example.com"
+      ],
+      "background": "Login retry and high-frequency access can trigger reCAPTCHA challenge.",
+      "known_signals": [
+        "iframe[src*='recaptcha']",
+        "textarea[name='g-recaptcha-response']",
+        "text:I'm not a robot"
+      ]
+    },
+    {
+      "site_name": "sample_turnstile_site",
+      "host_patterns": [
+        "example.org",
+        "*.example.org"
+      ],
+      "background": "Cloudflare managed challenge can appear before download navigation.",
+      "known_signals": [
+        "iframe[src*='challenges.cloudflare.com']",
+        "[data-cf-beacon]",
+        "text:Verify you are human"
+      ]
+    }
+  ]
+}
